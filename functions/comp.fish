@@ -97,17 +97,7 @@ If the output file's directory doesn't exist, it will be created automatically."
         set output_file $_flag_output
     else
         # Use first input file name as base
-        set -l first_input (realpath $input_paths[1])
-        set -l first_input_basename ""
-
-        # Handle "." and ".." special cases
-        if test "$input_paths[1]" = "."
-            set first_input_basename (basename $first_input)
-        else if test "$input_paths[1]" = ".."
-            set first_input_basename (basename (dirname $first_input))
-        else
-            set first_input_basename (basename $input_paths[1])
-        end
+        set -l first_input_basename (basename (realpath $input_paths[1]))
 
         # Default to zip format
         set output_file "$first_input_basename.zip"
@@ -223,24 +213,13 @@ If the output file's directory doesn't exist, it will be created automatically."
 
             # Process each input path
             for input in $input_paths
-                set -l parent_dir (dirname (realpath $input))
-                set -l base_name (basename (realpath $input))
-
-                # Change to parent dir to avoid full paths in zip
-                cd $parent_dir
-
-                # Create exclude option if needed to prevent adding the output file itself
-                set -l exclude_option ""
-                if contains $output_file (realpath $input)/*; or test $output_file = (realpath $input)
-                    set exclude_option -x
-                    set exclude_option $exclude_option (string replace (realpath $parent_dir)"/" "" $output_file)
-                end
+                set -l base_name (basename $input)
 
                 # Compress with relative path
                 if set -q _flag_verbose
-                    zip -r -$level $output_file $base_name $exclude_option
+                    zip -r -$level $output_file $input
                 else
-                    zip -q -r -$level $output_file $base_name $exclude_option
+                    zip -q -r -$level $output_file $input
                 end
 
                 # Check for errors
@@ -253,9 +232,6 @@ If the output file's directory doesn't exist, it will be created automatically."
                     end
                     return 1
                 end
-
-                # Return to original dir
-                cd $current_dir
             end
 
         case rar
