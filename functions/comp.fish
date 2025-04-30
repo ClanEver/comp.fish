@@ -259,26 +259,10 @@ If the output file's directory doesn't exist, it will be created automatically."
             end
 
         case rar
-            # Create exclude pattern if needed
-            set -l exclude_option ""
-            for input in $input_paths
-                if contains $output_file (realpath $input)/*; or test $output_file = (realpath $input)
-                    set temp_exclude_file (mktemp)
-                    echo $output_basename >$temp_exclude_file
-                    set exclude_option -ep "-x@$temp_exclude_file"
-                    break
-                end
-            end
-
             if set -q _flag_verbose
-                rar a -m$level $exclude_option $output_file $input_paths
+                rar a -m$level $output_file $input_paths
             else
-                rar a -idq -m$level $exclude_option $output_file $input_paths
-            end
-
-            # Clean up temp file if used
-            if test -n "$temp_exclude_file"
-                rm -f $temp_exclude_file
+                rar a -idq -m$level $output_file $input_paths
             end
 
         case 7z
