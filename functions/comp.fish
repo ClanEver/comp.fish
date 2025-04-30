@@ -1,10 +1,10 @@
 function comp --description "Compress files or directories"
-    set -l options 'o/output=' 'l/level=' 'h/help' 'v/verbose'
+    set -l options 'o/output=' 'l/level=' h/help v/verbose
     argparse -n compress $options -- $argv
 
     # Check if we're in a Chinese locale
     set -l is_chinese_env 0
-    if string match -qr "zh" $LANG; or string match -qr "zh" $LC_ALL; or string match -qr "zh" $LC_MESSAGES
+    if string match -qr zh $LANG; or string match -qr zh $LC_ALL; or string match -qr zh $LC_MESSAGES
         set is_chinese_env 1
     end
 
@@ -63,7 +63,7 @@ If the output file's directory doesn't exist, it will be created automatically."
         set -l abs_path (realpath $input)
 
         # Prevent root dir compression
-        if test "$abs_path" = "/"
+        if test "$abs_path" = /
             if test $is_chinese_env -eq 1
                 echo "错误: 拒绝压缩根目录 '/'"
             else
@@ -76,7 +76,7 @@ If the output file's directory doesn't exist, it will be created automatically."
     end
 
     # Set default compression level
-    set -l level "5"
+    set -l level 5
     if set -q _flag_level
         # Validate compression level
         if string match -qr '^[1-9]$' $_flag_level
@@ -152,11 +152,11 @@ If the output file's directory doesn't exist, it will be created automatically."
     set -l format ""
     switch $output_file
         case "*.zip"
-            set format "zip"
+            set format zip
         case "*.rar"
-            set format "rar"
+            set format rar
         case "*.7z"
-            set format "7z"
+            set format 7z
         case "*.tar.bz2" "*.tbz2" "*.tbz" "*.tb2"
             set format "tar.bz2"
         case "*.tar.gz" "*.tgz"
@@ -166,15 +166,15 @@ If the output file's directory doesn't exist, it will be created automatically."
         case "*.tar.lzma" "*.tlz"
             set format "tar.lzma"
         case "*.tar"
-            set format "tar"
+            set format tar
         case "*.bz2"
-            set format "bz2"
+            set format bz2
         case "*.gz"
-            set format "gz"
+            set format gz
         case "*.xz"
-            set format "xz"
+            set format xz
         case "*.lzma"
-            set format "lzma"
+            set format lzma
         case "*"
             if test $is_chinese_env -eq 1
                 echo "无法从文件名确定压缩格式: $output_file"
@@ -187,7 +187,7 @@ If the output file's directory doesn't exist, it will be created automatically."
     end
 
     # Check input count for single-file formats
-    if contains $format "bz2" "gz" "xz" "lzma"
+    if contains $format bz2 gz xz lzma
         if test (count $input_paths) -gt 1
             if test $is_chinese_env -eq 1
                 echo "$format 格式只能压缩单个文件，不能压缩多个文件"
@@ -209,12 +209,15 @@ If the output file's directory doesn't exist, it will be created automatically."
     # Set verbose flag if needed
     set -l verbose_flag ""
     if set -q _flag_verbose
-        set verbose_flag "-v"
+        set verbose_flag -v
     end
+
+    # Get output file basename for exclusion
+    set -l output_basename (basename $output_file)
 
     # Execute compression
     switch $format
-        case "zip"
+        case zip
             # Save current directory
             set -l current_dir (pwd)
 
@@ -226,18 +229,25 @@ If the output file's directory doesn't exist, it will be created automatically."
                 # Change to parent dir to avoid full paths in zip
                 cd $parent_dir
 
+                # Create exclude option if needed to prevent adding the output file itself
+                set -l exclude_option ""
+                if contains $output_file (realpath $input)/*; or test $output_file = (realpath $input)
+                    set exclude_option -x
+                    set exclude_option $exclude_option (string replace (realpath $parent_dir)"/" "" $output_file)
+                end
+
                 # Compress with relative path
                 if set -q _flag_verbose
-                    zip -r -$level $output_file $base_name
+                    zip -r -$level $output_file $base_name $exclude_option
                 else
-                    zip -q -r -$level $output_file $base_name
+                    zip -q -r -$level $output_file $base_name $exclude_option
                 end
 
                 # Check for errors
                 if test $status -ne 0
                     cd $current_dir
                     if test $is_chinese_env -eq 1
-                        echo "压缩过程中发生错误"
+                        echo 压缩过程中发生错误
                     else
                         echo "Error occurred during compression"
                     end
@@ -248,81 +258,131 @@ If the output file's directory doesn't exist, it will be created automatically."
                 cd $current_dir
             end
 
-        case "rar"
-            if set -q _flag_verbose
-                rar a -m$level $output_file $input_paths
-            else
-                rar a -idq -m$level $output_file $input_paths
+        case rar
+            # Create exclude pattern if needed
+            set -l exclude_option ""
+            for input in $input_paths
+                if contains $output_file (realpath $input)/*; or test $output_file = (realpath $input)
+                    set temp_exclude_file (mktemp)
+                    echo $output_basename >$temp_exclude_file
+                    set exclude_option -ep "-x@$temp_exclude_file"
+                    break
+                end
             end
 
-        case "7z"
             if set -q _flag_verbose
-                7z a -mx=$level $output_file $input_paths
+                rar a -m$level $exclude_option $output_file $input_paths
             else
-                7z a -bd -mx=$level $output_file $input_paths
+                rar a -idq -m$level $exclude_option $output_file $input_paths
+            end
+
+            # Clean up temp file if used
+            if test -n "$temp_exclude_file"
+                rm -f $temp_exclude_file
+            end
+
+        case 7z
+            # Create exclude pattern if needed
+            set -l exclude_option ""
+            for input in $input_paths
+                if contains $output_file (realpath $input)/*; or test $output_file = (realpath $input)
+                    set exclude_option "-xr!$output_basename"
+                    break
+                end
+            end
+
+            if set -q _flag_verbose
+                7z a -mx=$level $exclude_option $output_file $input_paths
+            else
+                7z a -bd -mx=$level $exclude_option $output_file $input_paths
             end
 
         case "tar.bz2"
+            set -l temp_excludes_file (mktemp)
+            echo $output_basename >$temp_excludes_file
+
             if set -q _flag_verbose
-                tar -cjvf $output_file $input_paths
+                tar -cjvf $output_file -X $temp_excludes_file $input_paths
             else
-                tar -cjf $output_file $input_paths
+                tar -cjf $output_file -X $temp_excludes_file $input_paths
             end
+
+            rm -f $temp_excludes_file
 
         case "tar.gz"
+            set -l temp_excludes_file (mktemp)
+            echo $output_basename >$temp_excludes_file
+
             if set -q _flag_verbose
-                tar -czvf $output_file $input_paths
+                tar -czvf $output_file -X $temp_excludes_file $input_paths
             else
-                tar -czf $output_file $input_paths
+                tar -czf $output_file -X $temp_excludes_file $input_paths
             end
+
+            rm -f $temp_excludes_file
 
         case "tar.xz"
+            set -l temp_excludes_file (mktemp)
+            echo $output_basename >$temp_excludes_file
+
             if set -q _flag_verbose
-                XZ_OPT="-$level" tar -cJvf $output_file $input_paths
+                XZ_OPT="-$level" tar -cJvf $output_file -X $temp_excludes_file $input_paths
             else
-                XZ_OPT="-$level" tar -cJf $output_file $input_paths
+                XZ_OPT="-$level" tar -cJf $output_file -X $temp_excludes_file $input_paths
             end
+
+            rm -f $temp_excludes_file
 
         case "tar.lzma"
+            set -l temp_excludes_file (mktemp)
+            echo $output_basename >$temp_excludes_file
+
             if set -q _flag_verbose
-                XZ_OPT="-$level" tar --lzma -cvf $output_file $input_paths
+                XZ_OPT="-$level" tar --lzma -cvf $output_file -X $temp_excludes_file $input_paths
             else
-                XZ_OPT="-$level" tar --lzma -cf $output_file $input_paths
+                XZ_OPT="-$level" tar --lzma -cf $output_file -X $temp_excludes_file $input_paths
             end
 
-        case "tar"
+            rm -f $temp_excludes_file
+
+        case tar
+            set -l temp_excludes_file (mktemp)
+            echo $output_basename >$temp_excludes_file
+
             if set -q _flag_verbose
-                tar -cvf $output_file $input_paths
+                tar -cvf $output_file -X $temp_excludes_file $input_paths
             else
-                tar -cf $output_file $input_paths
+                tar -cf $output_file -X $temp_excludes_file $input_paths
             end
 
-        case "bz2"
+            rm -f $temp_excludes_file
+
+        case bz2
             if set -q _flag_verbose
-                bzip2 -$level -v -c $input_paths[1] > $output_file
+                bzip2 -$level -v -c $input_paths[1] >$output_file
             else
-                bzip2 -$level -c $input_paths[1] > $output_file
+                bzip2 -$level -c $input_paths[1] >$output_file
             end
 
-        case "gz"
+        case gz
             if set -q _flag_verbose
-                gzip -$level -v -c $input_paths[1] > $output_file
+                gzip -$level -v -c $input_paths[1] >$output_file
             else
-                gzip -$level -c $input_paths[1] > $output_file
+                gzip -$level -c $input_paths[1] >$output_file
             end
 
-        case "xz"
+        case xz
             if set -q _flag_verbose
-                xz -$level -v -c $input_paths[1] > $output_file
+                xz -$level -v -c $input_paths[1] >$output_file
             else
-                xz -$level -c $input_paths[1] > $output_file
+                xz -$level -c $input_paths[1] >$output_file
             end
 
-        case "lzma"
+        case lzma
             if set -q _flag_verbose
-                lzma -$level -v -c $input_paths[1] > $output_file
+                lzma -$level -v -c $input_paths[1] >$output_file
             else
-                lzma -$level -c $input_paths[1] > $output_file
+                lzma -$level -c $input_paths[1] >$output_file
             end
     end
 
@@ -336,11 +396,10 @@ If the output file's directory doesn't exist, it will be created automatically."
         return 0
     else
         if test $is_chinese_env -eq 1
-            echo "压缩过程中发生错误"
+            echo 压缩过程中发生错误
         else
             echo "Error occurred during compression"
         end
         return 1
     end
 end
-
