@@ -1,6 +1,6 @@
 function comp --description "Compress files or directories"
     set -l options 'o/output=' 'l/level=' h/help v/verbose
-    argparse -n compress $options -- $argv
+    argparse $options -- $argv
 
     # Check if we're in a Chinese locale
     set -l is_chinese_env 0
